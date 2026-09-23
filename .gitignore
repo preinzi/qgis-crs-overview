@@ -1,0 +1,9 @@
+# Python bytecode, created by QGIS when it loads the plugin
+__pycache__/
+*.pyc
+
+# Plugin ZIP packages (built for upload, not versioned)
+*.zip
+
+# Editor settings
+.vscode/
