@@ -72,4 +72,4 @@ GPL-3.0-or-later — see LICENSE.
 
 ## Acknowledgment
 
-This plugin was coded with the help of claude.ai.
+This plugin was created by Stephan Preinstorfer (LiberGIS) with the help of claude.ai.
