@@ -3,7 +3,7 @@ name=CRS Overview
 qgisMinimumVersion=3.34
 qgisMaximumVersion=4.99
 description=Lists all layers in the project grouped by CRS and highlights layers with a custom or invalid CRS.
-version=0.1
+version=0.2
 author=Stephan Preinstorfer (LiberGIS)
 email=stephan@libergis.at
 about=Dock widget that gives a quick overview of which coordinate reference systems are in use across the current project. Layers are grouped by CRS; groups with a custom (user-defined) or invalid/unset CRS are highlighted so mismatches are easy to spot before they cause problems downstream.
@@ -15,4 +15,5 @@ tags=crs,projection,layers,overview,qa
 icon=icon.png
 experimental=True
 hasProcessingProvider=False
-changelog=0.1 Initial release
+changelog=0.2 Each unknown CRS now gets its own group, and layers without a CRS always show as Invalid instead of being merged with custom CRS; tables without geometry are listed separately instead of being flagged Invalid; the panel comes to the front when opened while tabbed behind another panel; the plugin unloads cleanly
+    0.1 Initial release

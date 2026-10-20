@@ -53,11 +53,15 @@ class CrsOverviewPlugin:
     def _toggle_dock_widget(self, checked):
         self.dock_widget.setVisible(checked)
         if checked:
+            # bring the panel to the front if it is tabbed behind another
+            # panel (setVisible alone leaves it hidden behind that tab)
+            self.dock_widget.raise_()
             self.dock_widget.refresh()
 
     def unload(self):
-        self.iface.pluginMenu().removeAction(self.action)
-        self.iface.removeToolBarIcon(self.action)
+        if self.action is not None:
+            self.iface.pluginMenu().removeAction(self.action)
+            self.iface.removeToolBarIcon(self.action)
 
         if self.dock_widget is not None:
             self.dock_widget.disconnect_signals()
@@ -65,4 +69,8 @@ class CrsOverviewPlugin:
             self.dock_widget.deleteLater()
             self.dock_widget = None
 
-        self.action = None
+        if self.action is not None:
+            # the action is parented to the QGIS main window, so it would
+            # otherwise stay alive after every unload/reload
+            self.action.deleteLater()
+            self.action = None

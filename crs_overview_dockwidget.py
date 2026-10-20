@@ -3,7 +3,8 @@
 """CRS Overview - dock widget.
 
 Shows every layer in the current project grouped by CRS. Groups whose
-CRS is custom (user-defined) or invalid/unset are highlighted.
+CRS is custom (user-defined) or invalid/unset are highlighted. Tables
+without geometry need no CRS and are listed separately at the end.
 
 Refresh is triggered automatically when layers are added or removed,
 and manually via the "Refresh" button (e.g. after reassigning a
@@ -43,9 +44,12 @@ except ImportError:
 STATUS_OK = "OK"
 STATUS_CUSTOM = "Custom"
 STATUS_INVALID = "Invalid"
+STATUS_NO_GEOMETRY = "n/a"
 
 CUSTOM_CRS_COLOR = QColor(255, 235, 156)   # soft yellow
 INVALID_CRS_COLOR = QColor(255, 199, 206)  # soft red
+
+STATUS_PRIORITY = {STATUS_INVALID: 0, STATUS_CUSTOM: 1, STATUS_OK: 2}
 
 
 class CrsOverviewDockWidget(QDockWidget):
@@ -113,52 +117,50 @@ class CrsOverviewDockWidget(QDockWidget):
         project_crs = QgsProject.instance().crs()
         project_status, project_color = self._crs_status(project_crs)
         self.project_crs_label.setText(
-            f"Project CRS: {self._crs_display_text(project_crs)} ({project_status})"
+            f"Project CRS: {self._crs_display_text(project_crs)} "
+            f"({project_status})"
         )
         self._colorize_label(self.project_crs_label, project_color)
 
         layers = list(QgsProject.instance().mapLayers().values())
-        groups = {}  # group_key -> {"crs": QgsCoordinateReferenceSystem, "layers": [...]}
+
+        # group key -> {"crs": QgsCoordinateReferenceSystem, "layers": [...]}
+        groups = {}
+        no_geometry_layers = []
 
         for layer in layers:
+            if not layer.isSpatial():
+                # tables without geometry have no CRS by design
+                no_geometry_layers.append(layer)
+                continue
             crs = layer.crs()
-            authid = crs.authid()
-            group_key = authid if authid else f"srsid-{crs.srsid()}"
+            group_key = self._crs_group_key(crs)
             groups.setdefault(group_key, {"crs": crs, "layers": []})
             groups[group_key]["layers"].append(layer)
 
         custom_count = 0
         invalid_count = 0
 
-        status_priority = {STATUS_INVALID: 0, STATUS_CUSTOM: 1, STATUS_OK: 2}
-
         def sort_key(item):
-            _key, data = item
+            key, data = item
             status, _color = self._crs_status(data["crs"])
-            return (status_priority[status], data["crs"].description() or _key)
+            return (STATUS_PRIORITY[status], data["crs"].description() or key)
 
-        for group_key, data in sorted(groups.items(), key=sort_key):
+        for _group_key, data in sorted(groups.items(), key=sort_key):
             crs = data["crs"]
             status, color = self._crs_status(crs)
             if status == STATUS_CUSTOM:
                 custom_count += 1
             elif status == STATUS_INVALID:
                 invalid_count += 1
-
-            group_item = QTreeWidgetItem(
-                [self._crs_display_text(crs), "", status]
+            self._add_group(
+                self._crs_display_text(crs), status, color, data["layers"]
             )
-            self._colorize(group_item, color)
-            self.tree.addTopLevelItem(group_item)
 
-            for layer in sorted(data["layers"], key=lambda l: l.name()):
-                child = QTreeWidgetItem(
-                    [layer.name(), self._layer_type_label(layer), status]
-                )
-                self._colorize(child, color)
-                group_item.addChild(child)
-
-            group_item.setExpanded(True)
+        if no_geometry_layers:
+            self._add_group(
+                "(no geometry)", STATUS_NO_GEOMETRY, None, no_geometry_layers
+            )
 
         summary = f"{len(layers)} layer(s), {len(groups)} CRS group(s)"
         extra = []
@@ -168,7 +170,35 @@ class CrsOverviewDockWidget(QDockWidget):
             extra.append(f"{invalid_count} invalid")
         if extra:
             summary += " (" + ", ".join(extra) + ")"
+        if no_geometry_layers:
+            summary += f", {len(no_geometry_layers)} without geometry"
         self.summary_label.setText(summary)
+
+    def _add_group(self, label, status, color, layers):
+        group_item = QTreeWidgetItem([label, "", status])
+        self._colorize(group_item, color)
+        self.tree.addTopLevelItem(group_item)
+
+        for layer in sorted(layers, key=lambda lyr: lyr.name()):
+            child = QTreeWidgetItem(
+                [layer.name(), self._layer_type_label(layer), status]
+            )
+            self._colorize(child, color)
+            group_item.addChild(child)
+
+        group_item.setExpanded(True)
+
+    @staticmethod
+    def _crs_group_key(crs):
+        # All invalid CRS share one group. A valid CRS without authority
+        # id (e.g. an ad-hoc WKT from a layer's .prj) is keyed by its own
+        # definition: QGIS leaves srsid() at 0 for all of these, so the
+        # srsid cannot tell different unknown CRS apart.
+        if not crs.isValid():
+            return "invalid"
+        if crs.authid():
+            return crs.authid()
+        return crs.toWkt() or crs.description()
 
     @staticmethod
     def _crs_status(crs):
@@ -188,7 +218,7 @@ class CrsOverviewDockWidget(QDockWidget):
         # isinstance checks avoid depending on the exact QgsMapLayerType /
         # Qgis.LayerType enum spelling, which differs across QGIS 3.x/4.x.
         if isinstance(layer, QgsVectorLayer):
-            return "Vector"
+            return "Vector" if layer.isSpatial() else "Table"
         if isinstance(layer, QgsRasterLayer):
             return "Raster"
         return "Other"
@@ -196,8 +226,18 @@ class CrsOverviewDockWidget(QDockWidget):
     @staticmethod
     def _crs_display_text(crs):
         label = crs.authid() if crs.authid() else "(no authority id)"
-        description = crs.description() if crs.isValid() else "unknown / not set"
-        return f"{label} \u2014 {description}"
+        if not crs.isValid():
+            description = "unknown / not set"
+        elif crs.description():
+            description = crs.description()
+        else:
+            # unnamed definition (e.g. a bare PROJ string): show the start
+            # of it so that different unnamed CRS can be told apart
+            definition = crs.toProj()
+            if len(definition) > 80:
+                definition = definition[:80] + "…"
+            description = definition or "unnamed"
+        return f"{label} — {description}"
 
     @staticmethod
     def _colorize(item, color):
@@ -212,4 +252,6 @@ class CrsOverviewDockWidget(QDockWidget):
         if color is None:
             label.setStyleSheet("")
             return
-        label.setStyleSheet(f"background-color: {color.name()}; padding: 2px;")
+        label.setStyleSheet(
+            f"background-color: {color.name()}; padding: 2px;"
+        )

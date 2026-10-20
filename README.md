@@ -16,6 +16,8 @@ between layers are easy to spot before they cause problems downstream.
   Invalid (unrecognised/unset) — with Invalid and Custom groups listed
   first, sorted by severity
 - Works with both vector and raster layers
+- Tables without geometry are listed separately at the end, without
+  highlighting, since they don't need a CRS
 - Automatically refreshes when layers are added or removed, or when
   the project's CRS changes
 - Manual Refresh button
@@ -32,7 +34,7 @@ ZIP > select the .zip > Install
 
 ## Requirements
 
-QGIS 3.34 or later (tested on QGIS 3.44)
+QGIS 3.34 or later (tested on QGIS 3.44 and 4.2)
 
 ## Known limitation
 
@@ -51,8 +53,17 @@ catalog entry) or its `srsid()` falls in QGIS's user-CRS range (a CRS
 explicitly registered under Settings > Custom Coordinate Reference
 Systems). Everything else counts as OK.
 
+All layers with an invalid CRS are listed in one group. Each custom
+CRS gets its own group, so layers only share a group if their CRS
+definitions are identical.
+
 ## Changelog
 
+- **0.2** — Each unknown CRS now gets its own group, and layers without
+  a CRS always show as Invalid instead of being merged with custom CRS;
+  tables without geometry are listed separately instead of being
+  flagged Invalid; the panel comes to the front when opened while
+  tabbed behind another panel; the plugin unloads cleanly
 - **0.1** — Initial release
 
 ## License
